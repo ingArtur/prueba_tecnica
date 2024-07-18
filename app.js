@@ -26,6 +26,7 @@ app.post('/crearRuleta', (req, res) => {
     const nuevaRuleta = {
         id: uuidv4(), // Genera un id para la nueva ruleta
         estado: 'cerrada', //Inicialmente, la ruleta esta cerrada
+        apuesta: [], //Almacena las apuestas realizadas
         ...req.body
     };
 
@@ -58,7 +59,99 @@ app.post('/abrirRuleta', (req, res) => {
     } catch (error) {
         res.status(500).json({estado: 'denegado', mensaje: 'Error del servidor'});
     }
-})
+});
+//Endpoint para realizar una apuesta
+app.post('/apuesta', (req, res) => {
+    try {
+        const { ruletaId, cantidad, tipoApuesta, valor} = req.body;
+        const usuarioId = req.headers['usuario-id'];
+
+        if (!usuarioId) {
+            return res.status(400).json({estas: 'denegado', mensaje:'ID de usuario es requerido'});
+
+        }
+        if (!ruletaId || !cantidad || !tipoApuesta || !valor) {
+            return res.status(400).json({estado: 'denegado', mensaje: 'Todos los campos deben ser diligenciados'});
+        }
+        if (cantidad > 10000) {
+            return res.status(400).json({estado: 'denegado', mensaje: 'la cantidad maxima es de 10,000 mil dolares'});
+        }
+
+        const ruleta = ruleta.find(r => r.id === ruletaId);
+        if(!ruleta) {
+            return res.status(404).json({estado: 'denegado', mensaje: 'Ruleta no encontrada'});
+        }
+        if (ruleta.estado !== 'abierta') {
+            return res.status(400).json({estado: 'denegado', mensaje: 'la ruleta no esta abierta'});
+        }
+
+        if(tipoApuesta === 'numero'){
+            if (valor < 0 || valor > 36){
+                return res.status(400).json({estado: 'denegado', mensaje:'El numero debe estar entre 0 y 36'});
+            }
+        } else if (tipoApuesta === 'color') {
+            if (valor !== 'rojo' && valor !== 'negro') {
+                return res.status(400).json({estado: 'denegado', mensaje: 'el color debe de ser rojo o negro'});
+            }
+        } else {
+            return res.status(400).json({estado: 'denegado', mensaje: 'Tipo de apuesta no valida'});
+        }
+
+        ruleta.apuesta.push({
+            usuarioId,
+            cantidad,
+            tipoApuesta,
+            valor
+        });
+
+        res.status(200).json({ estado: 'exitoso', mensaje: 'Apuesta registrada correctamente'});
+    } catch (error) {
+        res.status(500).json({estado:'denegado', mensaje: 'Error del servidor'});
+    }
+});
+
+//Endpoint para cerra una ruleta y calcular resultados 
+app.post('/cerrarRuleta', (req, res) => {
+    try {
+        const { id } = req.body;
+        if (!id) {
+            return res.status(400).json({ estado: 'denegado', mensaje: 'ID requerido'});
+        }
+
+        const ruleta = ruletas.find( r = r.id === id);
+        if(!ruleta) {
+            return res.status(400).json({ estado: 'denegado', mensaje: 'Ruleta no encontrada'});
+        }
+        if (ruleta.estado !== 'abierta'){
+            return res.status(400).json({estado: 'denegado', mensaje: 'Laruleta no esta abierta'});
+        }
+
+        ruleta.estado = 'cerrada';
+
+        const numeroGanador = math.floor(math,random() * 37);
+        const colorGanador = numeroGanador % 2 === 0 ? 'rojo' : 'negro';
+
+        const resultado = ruleta.apuestas.map( apuesta => {
+            if (apuesta.tipoApuesta === 'numero'  && apuesta.valor === numeroGanador){
+                return {usuarioId: apuesta.usuarioId, ganancia: apuesta.cantidad * 5};
+            } else if (apuesta.tipoApuesta === 'color' && apuesta.valor === colorGanador) {
+                return { usuarioId: apuesta.usuarioId, ganancia: apuesta.cantidad * 1.8};
+            } else {
+                return {usuarioId: apuesta.usuarioId, ganancia: 0};
+            }
+        });
+
+        res.status(200).json({
+            estado: 'exitoso',
+            numeroGanador,
+            colorGanador,
+            resultado
+        });
+    } catch (error) {
+        res.status(500).json({ estado: 'denegado', mensaje: 'Error del servidor'});
+    }
+});
+
 // Manejador de rutas no encontradas (404)
 app.use((req, res) => {
     res.status(404).send('Ruta no encontrada');
