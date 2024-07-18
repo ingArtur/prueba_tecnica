@@ -1,8 +1,8 @@
 // se Importa las librerías necesarias
 const express = require('express');
+// const morgan = require("morgan");
 const bodyParser = require('body-parser');
 const { v4: uuidv4 } = require('uuid');
-const morgan = require("morgan");
 
 //se Crea una nueva instancia de Express
 const app = express();
@@ -11,7 +11,7 @@ const app = express();
 app.use(bodyParser.json());
 
 //middlewares
-app.use(morgan("dev"));
+// app.use(morgan("dev"));
 
 // Array para almacenar las ruletas creadas
 let ruletas = [];
@@ -43,7 +43,7 @@ app.post('/abrirRuleta', (req, res) => {
         if (!id) {
             return res.status(400).json({ estado: 'denegado', mensaje: 'ID es requerido'});
         }
-        
+
         const ruleta = ruleta.find(r = r.id === id);
         if (!ruleta) {
             return res.status(404).json({estado: 'denegado', mensaje: 'Ruleta no encontrada'});
