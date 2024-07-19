@@ -1,7 +1,7 @@
 // se Importa las librerías necesarias
 const express = require('express');
-// const morgan = require("morgan");
 const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
 //se Crea una nueva instancia de Express
@@ -10,11 +10,28 @@ const app = express();
 // Configuración del body-parser para manejar solicitudes JSON
 app.use(bodyParser.json());
 
-//middlewares
-// app.use(morgan("dev"));
+//Conectar a mongoDB
+mongoose.connect('mongodb://localhost:27017/ruletas').then(() => {
+    console.log('Conectado a mongoDB');
+}).catch(err => {
+    console.error('Error al conectar a mongoDB', err)
+});
 
-// Array para almacenar las ruletas creadas
-let ruletas = [];
+//Definicion esquemas y modelos de mongoose
+const ApuestaSchema = new mongoose.Schema({
+    usuarioId: String,
+    cantidad: Number,
+    tipoApuesta: String,
+    valor: mongoose.Mixed
+});
+
+const RuletaSchema = new mongoose.Schema({
+    id: { type: String, unique: true },
+    estado: String,
+    apuestas: [ApuestaSchema]
+});
+
+const Ruleta = mongoose.model('Ruleta', RuletaSchema);
 
 // Ruta para la raíz del servidor
 app.get('/', (req, res) => {
@@ -22,22 +39,22 @@ app.get('/', (req, res) => {
 });
 
 // Endpoint para crear una nueva ruleta
-app.post('/crearRuleta', (req, res) => {
-    const nuevaRuleta = {
+app.post('/crearRuleta', async (req, res) => {
+    const nuevaRuleta = new Ruleta ({
         id: uuidv4(), // Genera un id para la nueva ruleta
         estado: 'cerrada', //Inicialmente, la ruleta esta cerrada
         apuesta: [], //Almacena las apuestas realizadas
         ...req.body
-    };
+    });
 
-    ruletas.push(nuevaRuleta);
+    await nuevaRuleta.save();
 
     // Enviar respuesta con código HTTP 201 (Created) y el id de la nueva ruleta
     res.status(201).json({ id: nuevaRuleta.id });
 });
 
 //Endpoint para abrir una ruleta
-app.post('/abrirRuleta', (req, res) => {
+app.post('/abrirRuleta', async (req, res) => {
     try{
         const { id } = req.body;
         //Verificacion si el ID esta presente, si no esta presente se devuelte una respuesta con codigo HTTP 400
@@ -45,23 +62,25 @@ app.post('/abrirRuleta', (req, res) => {
             return res.status(400).json({ estado: 'denegado', mensaje: 'ID es requerido'});
         }
 
-        const ruleta = ruleta.find(r = r.id === id);
+        const ruleta = await Ruleta.findOne({ id });
         if (!ruleta) {
-            return res.status(404).json({estado: 'denegado', mensaje: 'Ruleta no encontrada'});
+            return res.status(404).json({ estado: 'denegado', mensaje: 'Ruleta no encontrada' });
         }
 
-        if (ruleta.estadoi === 'abierta') {
+        if (ruleta.estado === 'abierta') {
             return res.status(400).json({estado: 'denegado', mensaje: 'La ruleta ya esta abierta'});
         }
 
-        ruleta.estado = 'estado';
-        res.status(200),json({estado: 'Exitoso'});
+        ruleta.estado = 'abierta';
+        await ruleta.save();
+
+        res.status(200),json({estado: 'exitoso'});
     } catch (error) {
         res.status(500).json({estado: 'denegado', mensaje: 'Error del servidor'});
     }
 });
 //Endpoint para realizar una apuesta
-app.post('/apuesta', (req, res) => {
+app.post('/apuesta', async (req, res) => {
     try {
         const { ruletaId, cantidad, tipoApuesta, valor} = req.body;
         const usuarioId = req.headers['usuario-id'];
@@ -77,7 +96,7 @@ app.post('/apuesta', (req, res) => {
             return res.status(400).json({estado: 'denegado', mensaje: 'la cantidad maxima es de 10,000 mil dolares'});
         }
 
-        const ruleta = ruleta.find(r => r.id === ruletaId);
+        const ruleta =  await Ruleta.findOne({id: ruletaId});
         if(!ruleta) {
             return res.status(404).json({estado: 'denegado', mensaje: 'Ruleta no encontrada'});
         }
@@ -97,12 +116,13 @@ app.post('/apuesta', (req, res) => {
             return res.status(400).json({estado: 'denegado', mensaje: 'Tipo de apuesta no valida'});
         }
 
-        ruleta.apuesta.push({
+        ruleta.apuestas.push({
             usuarioId,
             cantidad,
             tipoApuesta,
             valor
         });
+        await ruleta.save();
 
         res.status(200).json({ estado: 'exitoso', mensaje: 'Apuesta registrada correctamente'});
     } catch (error) {
@@ -111,14 +131,14 @@ app.post('/apuesta', (req, res) => {
 });
 
 //Endpoint para cerra una ruleta y calcular resultados 
-app.post('/cerrarRuleta', (req, res) => {
+app.post('/cerrarRuleta', async (req, res) => {
     try {
         const { id } = req.body;
         if (!id) {
             return res.status(400).json({ estado: 'denegado', mensaje: 'ID requerido'});
         }
 
-        const ruleta = ruletas.find( r = r.id === id);
+        const ruleta =  await Ruletas.findOne({id});
         if(!ruleta) {
             return res.status(400).json({ estado: 'denegado', mensaje: 'Ruleta no encontrada'});
         }
@@ -128,7 +148,7 @@ app.post('/cerrarRuleta', (req, res) => {
 
         ruleta.estado = 'cerrada';
 
-        const numeroGanador = math.floor(math,random() * 37);
+        const numeroGanador = Math.floor(Math.random() * 37);
         const colorGanador = numeroGanador % 2 === 0 ? 'rojo' : 'negro';
 
         const resultado = ruleta.apuestas.map( apuesta => {
@@ -140,6 +160,8 @@ app.post('/cerrarRuleta', (req, res) => {
                 return {usuarioId: apuesta.usuarioId, ganancia: 0};
             }
         });
+
+        await Ruleta.save();
 
         res.status(200).json({
             estado: 'exitoso',
